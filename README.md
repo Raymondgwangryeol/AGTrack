@@ -22,7 +22,10 @@ AGTrack offers several key functionalities:
   - Hourly Customer Inflow Information: Track when specific demographics of customers enter and exit a monitored area.
 - Potential for Business Intelligence: Offers a foundation for businesses to better understand their customer base and optimize operations.
 
-## Demo Video
+## Demo
+<img width="1273" alt="image" src="https://github.com/user-attachments/assets/d49a16e4-dc40-4af8-af01-4bf509cce8db" />
+<img width="1277" alt="image" src="https://github.com/user-attachments/assets/622c24f6-31e6-4892-9a0e-767f51f99ab9" />
+
 
 ## Project Structure
 ```
