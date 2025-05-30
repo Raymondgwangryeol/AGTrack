@@ -1,0 +1,23 @@
+program: optimize_tracker.py  # 여러분의 실행 스크립트
+method: bayes  # 혹은 random
+metric:
+  name: avg_iou  # 또는 custom 정의한 지표
+  goal: maximize
+
+early_terminate:
+  type: hyperband  # 또는 `bandit`
+  min_iter: 10
+  s: 2 
+
+parameters:
+  track_thresh:
+    min: 0.3
+    max: 0.7
+  match_thresh:
+    min: 0.7
+    max: 0.95
+  aspect_ratio_thresh:
+    min: 1.2
+    max: 2.0
+  min_box_area:
+    values: [5, 10, 20]
