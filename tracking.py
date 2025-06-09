@@ -41,11 +41,11 @@ class ObjectTracker:
         conf=None,
         nms=None,
         tsize=None,
-        track_thresh=0.6564,
+        track_thresh=0.68198,
         track_buffer=60,
-        match_thresh=0.9466,
-        aspect_ratio_thresh=1.362,
-        min_box_area=20,
+        match_thresh=0.76091,
+        aspect_ratio_thresh=1.33903,
+        min_box_area=5,
         mot20=True,
         fps=30, # Initial FPS value, will be updated from video
     ):
