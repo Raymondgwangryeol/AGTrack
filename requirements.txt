@@ -50,4 +50,6 @@ loguru==0.7.2
 # Evaluation
 bert-score==0.3.13
 
+pycocotools
+
 clip @ git+https://github.com/openai/CLIP.git
