@@ -38,7 +38,6 @@ ultralytics==8.1.27
 # yolox==0.3.0  # 대신 사용 시 위 ultralytics 주석 처리
 
 # ByteTrack dependencies
-ByteTrack
 cython_bbox==0.1.5
 lap==0.5.12
 filterpy==1.4.5
