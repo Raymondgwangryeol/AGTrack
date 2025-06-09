@@ -51,5 +51,6 @@ loguru==0.7.2
 bert-score==0.3.13
 
 pycocotools
+tabulate
 
 clip @ git+https://github.com/openai/CLIP.git
