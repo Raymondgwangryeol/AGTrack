@@ -41,7 +41,7 @@ class ObjectTracker:
         conf=None,
         nms=None,
         tsize=None,
-        track_thresh=0.68198,
+        track_thresh=0.58198,
         track_buffer=60,
         match_thresh=0.76091,
         aspect_ratio_thresh=1.33903,
