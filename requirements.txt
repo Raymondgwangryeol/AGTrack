@@ -1,7 +1,9 @@
-# Torch & TensorFlow
-torch==2.2.2
-torchvision==0.17.2
-torchaudio==2.2.2
+# Deep Learning Frameworks
+torch==2.7.0+cu118
+torchvision==0.22.0+cu118
+torchaudio==2.5.0
+torchmetrics==1.4.1
+torch-ema==0.3
 tensorflow==2.14.0
 
 # Computer Vision & Video
@@ -19,34 +21,33 @@ pandas==2.2.1
 numpy==1.25.2
 scipy==1.12.0
 
-# Utilities
+# Training Utils
 tqdm==4.66.2
 einops==0.8.0
 albumentations==1.4.0
 kornia==0.7.3
 
-# Hugging Face / Transformers
-transformers==4.40.0
+# Transformers / NLP
+transformers==4.31.0
 huggingface-hub==0.32.2
+clip @ git+https://github.com/openai/CLIP.git
 
-# CLIP (OpenAI 버전)
-git+https://github.com/openai/CLIP.git
-
-# UI
+# UI / Web
 gradio==5.31.0
+fastapi==0.115.12
+uvicorn==0.30.1
 
-# YOLOv8 (ultralytics 사용)
+# YOLOv8 or YOLOX (선택)
 ultralytics==8.1.27
-# 만약 YOLOX 사용하는 경우 아래 줄 대신 위 줄 주석 처리
-# yolox==0.3.0
+# yolox==0.3.0  # 대신 사용 시 위 ultralytics 주석 처리
 
-# ByteTrack
+# ByteTrack dependencies
 ByteTrack
 cython_bbox==0.1.5
 lap==0.5.12
 filterpy==1.4.5
 
-# Tracking 관련
+# Tracking Utils
 ffmpy==0.3.0
 gdown==5.2.0
 loguru==0.7.2
