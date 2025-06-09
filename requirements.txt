@@ -21,7 +21,7 @@ einops==0.8.0
 albumentations==1.4.0
 kornia==0.7.3
 
-clip==1.0
+git+https://github.com/openai/CLIP.git
 transformers==4.40.0
 huggingface-hub==0.32.2
 gradio==5.31.0
