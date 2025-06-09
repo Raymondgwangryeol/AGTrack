@@ -52,5 +52,6 @@ bert-score==0.3.13
 
 pycocotools
 tabulate
+yt_dlp
 
 clip @ git+https://github.com/openai/CLIP.git
