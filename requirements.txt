@@ -1,5 +1,5 @@
 # Deep Learning Frameworks
-torch==2.7.0+cu118
+torch==2.7.0
 torchvision==0.22.0+cu118
 torchaudio==2.5.0
 torchmetrics==1.4.1
