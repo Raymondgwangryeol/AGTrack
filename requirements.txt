@@ -41,6 +41,7 @@ ultralytics==8.1.27
 # yolox==0.3.0
 
 # ByteTrack
+ByteTrack
 cython_bbox==0.1.5
 lap==0.5.12
 filterpy==1.4.5
