@@ -20,4 +20,4 @@ parameters:
     min: 1.2
     max: 2.0
   min_box_area:
-    values: [5, 10, 20]
+    values: [3, 5, 10, 20]
