@@ -30,7 +30,6 @@ kornia==0.7.3
 # Transformers / NLP
 transformers==4.31.0
 huggingface-hub==0.32.2
-clip @ git+https://github.com/openai/CLIP.git
 
 # UI / Web
 gradio==5.31.0
@@ -54,3 +53,5 @@ loguru==0.7.2
 
 # Evaluation
 bert-score==0.3.13
+
+clip @ git+https://github.com/openai/CLIP.git
