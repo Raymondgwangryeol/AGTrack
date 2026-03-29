@@ -7,9 +7,11 @@ import torch
 import yt_dlp
 from MiVOLO.mivolo.data.data_reader import InputType, get_all_files, get_input_type
 from MiVOLO.mivolo.predictor import Predictor
+from MiVOLO.mivolo.data.misc import prepare_classification_images
 from timm.utils import setup_default_logging
 import argparse
 import numpy as np
+
 
 _logger = logging.getLogger("inference")
 
@@ -54,11 +56,54 @@ class VideoRecognizer:
         self.args = args
         self.predictor = Predictor(self.args, verbose=True)
 
-    def run(self, image: np.ndarray):
-        detected_objects, _ = self.predictor.recognize(image)
+    def run_batch(self, person_crops: list[np.ndarray]) -> list[tuple]:
+        """
+        YOLOX에서 크롭된 person 이미지 N장을 받아 배치로 한 번에 추론.
+        YOLOv8 detection 스킵, GPU 왕복 1번.
+        
+        Returns: [(age, gender, embed_vec), ...] 길이 N
+        """
+        if not person_crops:
+            return []
+    
+        mivolo = self.predictor.age_gender_model  # MiVOLO 인스턴스
+    
+        # disable_faces=True, with_persons=True 구조이므로
+        # faces_input 자리는 None → zeros로 채움
+        # model input = cat(face_zeros, person_tensor) → [N, 6, 224, 224]
+    
+        person_input = prepare_classification_images(
+            person_crops,
+            mivolo.input_size,
+            mivolo.data_config["mean"],
+            mivolo.data_config["std"],
+            device=mivolo.device,
+        )  # [N, 3, 224, 224]
+    
+        # face 채널은 zeros (disable_faces=True이므로)
+        face_input = torch.zeros_like(person_input)  # [N, 3, 224, 224]
+    
+        model_input = torch.cat((face_input, person_input), dim=1)  # [N, 6, 224, 224]
+    
+        output = mivolo.inference(model_input)  # [N, 3] (gender_logit x2, age x1)
+    
+        # 후처리
+        age_output = output[:, 2]
+        gender_output = output[:, :2].softmax(-1)
+        gender_probs, gender_indx = gender_output.topk(1)
+    
         results = []
-        for age, gender in zip(detected_objects.ages, detected_objects.genders):
-            embedding = image.flatten()
-            results.append((age, gender, embedding))
-
+        for i in range(len(person_crops)):
+            age = age_output[i].item()
+            age = age * (mivolo.meta.max_age - mivolo.meta.min_age) + mivolo.meta.avg_age
+            age = round(age, 2)
+    
+            gender = "male" if gender_indx[i].item() == 0 else "female"
+    
+            # 임베딩: person_input 벡터 (flatten된 정규화 텐서)
+            embed_vec = person_input[i].cpu().float().numpy().flatten()
+            embed_vec = embed_vec / (np.linalg.norm(embed_vec) + 1e-8)
+    
+            results.append((age, gender, embed_vec))
+    
         return results
