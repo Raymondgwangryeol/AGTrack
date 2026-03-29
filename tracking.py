@@ -224,9 +224,8 @@ class ObjectTracker:
         if crop.shape[0] <= 0 or crop.shape[1] <= 0:
             continue
 
-        crop_resized = cv2.resize(crop, (224, 224))
         valid_targets.append((t, tid, bbox_tlwh))
-        crops.append(crop_resized)
+        crops.append(crop)
         online_tlwhs.append(tlwh)
         online_ids.append(tid)
         online_scores.append(t.score)
