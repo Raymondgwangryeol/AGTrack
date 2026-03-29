@@ -186,88 +186,74 @@ class ObjectTracker:
     
     # process_image 메서드는 기존 로직을 유지하고, age/gender 추론 결과를 반환하도록 함
     def process_image(self, img, frame_id=0):
-        global age_gender_cache
-    
-        outputs, img_info = self.predictor.inference(img, self.timer)
-        online_img = img_info["raw_img"].copy()
-        current_frame_results = []
-        current_frame_tracked_pids = set()
-    
-        if outputs[0] is None:
-            return online_img, current_frame_results, current_frame_tracked_pids
-    
-        online_targets = self.tracker.update(
-            outputs[0], [img_info['height'], img_info['width']], self.exp.test_size
-        )
-    
-        # 1단계: 유효한 타겟만 걸러서 크롭 이미지를 미리 준비
-        valid_targets = []
-        for t in online_targets:
-            tlwh = t.tlwh
-            tid = t.track_id
-            if tlwh[2] <= 0 or tlwh[3] <= 0:
-                continue
-            vertical = tlwh[2] / tlwh[3] > self.tracker.aspect_ratio_thresh
-            if tlwh[2] * tlwh[3] <= self.tracker.min_box_area or vertical:
-                continue
-    
-            bbox_tlwh = [round(x, 2) for x in tlwh]
-            xyxy = self.tlwh_to_xyxy(bbox_tlwh)
-            x1, y1, x2, y2 = map(int, xyxy)
-            x1 = max(0, x1); y1 = max(0, y1)
-            x2 = min(img_info["width"], x2); y2 = min(img_info["height"], y2)
-            crop = img_info["raw_img"][y1:y2, x1:x2]
-    
-            if crop.shape[0] > 0 and crop.shape[1] > 0:
-                crop_resized = cv2.resize(crop, (224, 224))
-            else:
-                crop_resized = None
-    
-            valid_targets.append((t, tid, bbox_tlwh, crop_resized))
-    
-        # 2단계: age/gender 추론을 병렬로 수행
-        def infer_one(args):
-            t, tid, bbox_tlwh, crop_resized = args
-            age, gender, embed_vec = None, None, None
-            if crop_resized is not None:
-                result = self.predictor.age_gender_recognizer.run(crop_resized)
-                if result:
-                    age, gender, embed_vec = result[0]
-                    if embed_vec is not None:
-                        embed_vec = embed_vec / np.linalg.norm(embed_vec)
-            return t, tid, bbox_tlwh, age, gender, embed_vec
-    
-        max_workers = min(len(valid_targets), 8)  # GPU 병목 고려해 상한 조정
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(infer_one, vt): vt for vt in valid_targets}
-            infer_results = [f.result() for f in as_completed(futures)]
-    
-        # 3단계: 결과 취합 및 캐시 업데이트 (순서 무관, 순차 처리 OK)
-        online_tlwhs, online_ids, online_scores = [], [], []
-        for t, tid, bbox_tlwh, age, gender, embed_vec in infer_results:
-            if embed_vec is not None:
-                self.update_age_gender_cache(tid, age, gender, embed_vec, frame_id)
-    
-            stable_age, stable_gender = self.get_stable_age_gender(tid)
-            current_frame_results.append({
-                "id": tid,
-                "bbox": bbox_tlwh,
-                "score": round(t.score, 2),
-                "age": stable_age,
-                "gender": stable_gender,
-            })
-            current_frame_tracked_pids.add(tid)
-            online_tlwhs.append(t.tlwh)
-            online_ids.append(tid)
-            online_scores.append(t.score)
-    
-        fps_text = 1. / self.timer.average_time if self.timer.average_time > 0 else 0
-        online_img = plot_tracking(
-            img_info["raw_img"].copy(), online_tlwhs, online_ids,
-            frame_id=frame_id, fps=fps_text, age_gender_info=age_gender_cache
-        )
-    
+    global age_gender_cache
+
+    outputs, img_info = self.predictor.inference(img, self.timer)
+    online_img = img_info["raw_img"].copy()
+    current_frame_results = []
+    current_frame_tracked_pids = set()
+
+    if outputs[0] is None:
         return online_img, current_frame_results, current_frame_tracked_pids
+
+    online_targets = self.tracker.update(
+        outputs[0], [img_info['height'], img_info['width']], self.exp.test_size
+    )
+
+    # 1단계: 필터링 + 크롭 수집
+    valid_targets = []
+    crops = []
+    online_tlwhs, online_ids, online_scores = [], [], []
+
+    for t in online_targets:
+        tlwh = t.tlwh
+        tid = t.track_id
+        if tlwh[2] <= 0 or tlwh[3] <= 0:
+            continue
+        vertical = tlwh[2] / tlwh[3] > self.tracker.aspect_ratio_thresh
+        if tlwh[2] * tlwh[3] <= self.tracker.min_box_area or vertical:
+            continue
+
+        bbox_tlwh = [round(x, 2) for x in tlwh]
+        xyxy = self.tlwh_to_xyxy(bbox_tlwh)
+        x1, y1, x2, y2 = map(int, xyxy)
+        x1 = max(0, x1); y1 = max(0, y1)
+        x2 = min(img_info["width"], x2); y2 = min(img_info["height"], y2)
+        crop = img_info["raw_img"][y1:y2, x1:x2]
+
+        if crop.shape[0] <= 0 or crop.shape[1] <= 0:
+            continue
+
+        crop_resized = cv2.resize(crop, (224, 224))
+        valid_targets.append((t, tid, bbox_tlwh))
+        crops.append(crop_resized)
+        online_tlwhs.append(tlwh)
+        online_ids.append(tid)
+        online_scores.append(t.score)
+
+    # 2단계: 배치 추론 (GPU 왕복 1번)
+    batch_results = self.predictor.age_gender_recognizer.run_batch(crops)
+
+    # 3단계: 결과 매핑 + 캐시 업데이트
+    for (t, tid, bbox_tlwh), (age, gender, embed_vec) in zip(valid_targets, batch_results):
+        self.update_age_gender_cache(tid, age, gender, embed_vec, frame_id)
+        stable_age, stable_gender = self.get_stable_age_gender(tid)
+        current_frame_results.append({
+            "id": tid,
+            "bbox": bbox_tlwh,
+            "score": round(t.score, 2),
+            "age": stable_age,
+            "gender": stable_gender,
+        })
+        current_frame_tracked_pids.add(tid)
+
+    fps_text = 1. / self.timer.average_time if self.timer.average_time > 0 else 0
+    online_img = plot_tracking(
+        img_info["raw_img"].copy(), online_tlwhs, online_ids,
+        frame_id=frame_id, fps=fps_text, age_gender_info=age_gender_cache
+    )
+
+    return online_img, current_frame_results, current_frame_tracked_pids
 
     def process_video(self, video_path, save_path=None):
         cap = cv2.VideoCapture(video_path)
