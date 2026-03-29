@@ -56,36 +56,34 @@ class VideoRecognizer:
         self.args = args
         self.predictor = Predictor(self.args, verbose=True)
 
-    def run_batch(self, person_crops: list[np.ndarray]) -> list[tuple]:
-        """
-        YOLOX에서 크롭된 person 이미지 N장을 받아 배치로 한 번에 추론.
-        YOLOv8 detection 스킵, GPU 왕복 1번.
-        
-        Returns: [(age, gender, embed_vec), ...] 길이 N
-        """
+    def run_batch(self, person_crops: list) -> list:
         if not person_crops:
             return []
     
-        mivolo = self.predictor.age_gender_model  # MiVOLO 인스턴스
+        mivolo = self.predictor.age_gender_model
     
-        # disable_faces=True, with_persons=True 구조이므로
-        # faces_input 자리는 None → zeros로 채움
-        # model input = cat(face_zeros, person_tensor) → [N, 6, 224, 224]
+        # None 리스트를 face 자리에 넘기면 내부에서 zeros 처리
+        none_list = [None] * len(person_crops)
     
         person_input = prepare_classification_images(
-            person_crops,
+            person_crops,          # BGR np.ndarray 그대로 OK
             mivolo.input_size,
             mivolo.data_config["mean"],
             mivolo.data_config["std"],
             device=mivolo.device,
-        )  # [N, 3, 224, 224]
+        )  # [N, 3, H, W]
     
-        # face 채널은 zeros (disable_faces=True이므로)
-        face_input = torch.zeros_like(person_input)  # [N, 3, 224, 224]
+        face_input = prepare_classification_images(
+            none_list,             # 전부 zeros로 채워짐
+            mivolo.input_size,
+            mivolo.data_config["mean"],
+            mivolo.data_config["std"],
+            device=mivolo.device,
+        )  # [N, 3, H, W] zeros
     
-        model_input = torch.cat((face_input, person_input), dim=1)  # [N, 6, 224, 224]
+        model_input = torch.cat((face_input, person_input), dim=1)  # [N, 6, H, W]
     
-        output = mivolo.inference(model_input)  # [N, 3] (gender_logit x2, age x1)
+        output = mivolo.inference(model_input)  # [N, 3]
     
         # 후처리
         age_output = output[:, 2]
@@ -97,10 +95,8 @@ class VideoRecognizer:
             age = age_output[i].item()
             age = age * (mivolo.meta.max_age - mivolo.meta.min_age) + mivolo.meta.avg_age
             age = round(age, 2)
-    
             gender = "male" if gender_indx[i].item() == 0 else "female"
     
-            # 임베딩: person_input 벡터 (flatten된 정규화 텐서)
             embed_vec = person_input[i].cpu().float().numpy().flatten()
             embed_vec = embed_vec / (np.linalg.norm(embed_vec) + 1e-8)
     
