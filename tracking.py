@@ -137,35 +137,140 @@ class ObjectTracker:
     
 
     # 새로운 추론 결과 업데이트 함수
-    def update_age_gender_cache(self, tid, age, gender, embed_vec, frame_id):
+    def update_cache_batch(self, tids, ages, genders, embed_vecs, frame_id):
         global age_gender_cache # Access global cache
-        MAX_HISTORY = 10  # 최근 10개 유지
+        MAX_HISTORY    = 10
+        SIM_THRESHOLD  = 0.9   # 동일 인물 판단 기준
+        REID_THRESHOLD = 0.85  # Re-ID 매칭 기준 (트랙 끊김 후 재등장)
+        MAX_LOST_FRAMES = 90   # 몇 프레임까지 사라진 트랙을 Re-ID 후보로 유지
+        # ── 캐시 구조 변경 ────────────────────────────────────────────────────
+        # age_gender_cache[tid] = {
+        #     "embedding": np.ndarray [D],   # 최신 정규화 임베딩
+        #     "ages":      List[float],
+        #     "genders":   List[str],
+        #     "last_frame": int,             # 마지막으로 등장한 프레임 번호
+        #     "active":    bool,             # 현재 추적 중인지 여부
+        # }
 
         # 기존 로직 유지: 5프레임마다 또는 새로운 ID일 경우 캐시 갱신/초기화
-        if frame_id % 5 == 0 or tid not in age_gender_cache:
-            age_gender_cache[tid] = {
-                "embedding": embed_vec,
-                "ages": [age],
-                "genders": [gender]
-            }
-        else:
-            prev = age_gender_cache[tid]
-            similarity = np.dot(prev["embedding"], embed_vec)
+        """
+    현재 프레임 N명의 결과를 Similarity Matrix로 한 번에 처리.
+    
+    1. 신규 tid → 캐시에 없는 경우 Re-ID 시도 (사라진 트랙과 매칭)
+    2. 기존 tid → Similarity Matrix로 임베딩 일치 여부 확인 후 캐시 업데이트
+    """
+    global age_gender_cache
 
-            if similarity >= 0.9: # 유사도가 높으면 기존 이력에 추가
-                prev["ages"].append(age)
-                prev["genders"].append(gender)
-                prev["embedding"] = embed_vec # 최신 임베딩으로 업데이트
-            else: # 유사하지 않으면 새로 덮어쓰기 (새로운 얼굴로 간주)
+    if not tids:
+        return
+
+    N = len(tids)
+    new_embeds = np.stack(embed_vecs)  # [N, D]
+
+    # ── 현재 프레임에 등장한 tid를 active로 표시 ──────────────────────
+    active_tids = set(tids)
+    for tid in age_gender_cache:
+        age_gender_cache[tid]["active"] = tid in active_tids
+
+    # ── 기존 캐시에 있는 tid와 없는 tid 분리 ─────────────────────────
+    known_mask   = [i for i, t in enumerate(tids) if t in age_gender_cache]
+    unknown_mask = [i for i, t in enumerate(tids) if t not in age_gender_cache]
+
+    # ── ① 기존 tid: Similarity Matrix로 일괄 검증 ────────────────────
+    if known_mask:
+        known_tids    = [tids[i] for i in known_mask]
+        known_embeds  = np.stack([age_gender_cache[t]["embedding"] for t in known_tids])  # [K, D]
+        query_embeds  = new_embeds[known_mask]                                             # [K, D]
+
+        # [K, K] Similarity Matrix — 대각선이 각 tid의 self-similarity
+        sim_matrix = query_embeds @ known_embeds.T  # [K, K]
+        self_sim   = np.diag(sim_matrix)            # [K] 각 tid의 자기 자신과의 유사도
+
+        for idx, (tid, sim) in enumerate(zip(known_tids, self_sim)):
+            i = known_mask[idx]
+            prev = age_gender_cache[tid]
+
+            if sim >= SIM_THRESHOLD:
+                prev["ages"].append(ages[i])
+                prev["genders"].append(genders[i])
+                prev["embedding"]   = embed_vecs[i]
+                prev["last_frame"]  = frame_id
+                # 최근 MAX_HISTORY개로 제한
+                prev["ages"] = prev["ages"][-MAX_HISTORY:]
+                prev["genders"] = prev["genders"][-MAX_HISTORY:]
+            else:
+                # 유사도 낮음 → 다른 사람으로 판단, 캐시 초기화
                 age_gender_cache[tid] = {
-                    "embedding": embed_vec,
-                    "ages": [age],
-                    "genders": [gender]
+                    "embedding":  embed_vecs[i],
+                    "ages":       [ages[i]],
+                    "genders":    [genders[i]],
+                    "last_frame": frame_id,
+                    "active":     True,
                 }
 
             # 최근 MAX_HISTORY개로 제한
-            prev["ages"] = prev["ages"][-MAX_HISTORY:]
+            prev = age_gender_cache[tid]
+            prev["ages"]    = prev["ages"][-MAX_HISTORY:]
             prev["genders"] = prev["genders"][-MAX_HISTORY:]
+
+    # ── ② 신규 tid: 사라진 트랙과 Re-ID Similarity Matrix 매칭 ───────
+    if unknown_mask:
+        # 일정 프레임 내 사라진 트랙만 Re-ID 후보로 사용
+        lost_tids = [
+            t for t, info in age_gender_cache.items()
+            if not info["active"]
+            and (frame_id - info["last_frame"]) <= MAX_LOST_FRAMES
+        ]
+
+        query_embeds = new_embeds[unknown_mask]  # [U, D]
+
+        if lost_tids:
+            lost_embeds = np.stack([age_gender_cache[t]["embedding"] for t in lost_tids])  # [L, D]
+
+            # Re-ID Similarity Matrix: [U, L]
+            reid_sim_matrix = query_embeds @ lost_embeds.T
+
+            # 각 신규 tid에 대해 가장 유사한 lost_tid 찾기
+            best_match_inds  = np.argmax(reid_sim_matrix, axis=1)   # [U]
+            best_match_sims  = reid_sim_matrix[
+                np.arange(len(unknown_mask)), best_match_inds
+            ]  # [U]
+
+            for idx, i in enumerate(unknown_mask):
+                tid       = tids[i]
+                best_sim  = best_match_sims[idx]
+                best_lost = lost_tids[best_match_inds[idx]]
+
+                if best_sim >= REID_THRESHOLD:
+                    # Re-ID 성공: 기존 트랙 이력 이어받기
+                    recovered = age_gender_cache[best_lost]
+                    recovered["ages"].append(ages[i])
+                    recovered["genders"].append(genders[i])
+                    recovered["embedding"]  = embed_vecs[i]
+                    recovered["last_frame"] = frame_id
+                    recovered["active"]     = True
+                    age_gender_cache[tid]   = recovered
+                    del age_gender_cache[best_lost]  # 구 tid 제거
+                else:
+                    # Re-ID 실패: 신규 등록
+                    age_gender_cache[tid] = {
+                        "embedding":  embed_vecs[i],
+                        "ages":       [ages[i]],
+                        "genders":    [genders[i]],
+                        "last_frame": frame_id,
+                        "active":     True,
+                    }
+        else:
+            # lost 트랙 없음 → 전부 신규 등록
+            for i in unknown_mask:
+                tid = tids[i]
+                age_gender_cache[tid] = {
+                    "embedding":  embed_vecs[i],
+                    "ages":       [ages[i]],
+                    "genders":    [genders[i]],
+                    "last_frame": frame_id,
+                    "active":     True,
+                }
 
     # 안정화된 age, gender 반환
     def get_stable_age_gender(self, tid):
