@@ -15,11 +15,15 @@ if __name__ == "__main__":
     tracker = ObjectTracker(exp, checkpoint_path)
 
     out_path = "C:\\Users\\hcc98\\nayoung\\AGTrack\\outputs\\output.mp4"
-    results, people = tracker.process_video(
+    results, age_distribution, inflow_outflow = tracker.process_video(
         video_path=video_path,
         save_path=out_path,
     )
     json_path = "C:\\Users\\hcc98\\nayoung\\AGTrack\\outputs\\json\\output.json"
     os.makedirs(os.path.dirname(json_path), exist_ok=True)
     with open(json_path, "w") as f:
-        json.dump(people, f, indent=4, default=str)
+        json.dump({
+            "people": results,
+            "age_distribution": age_distribution,
+            "inflow_outflow": inflow_outflow,
+        }, f, indent=4, default=str)
