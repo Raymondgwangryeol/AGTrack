@@ -140,9 +140,9 @@ class ObjectTracker:
             global age_gender_cache
 
             MAX_HISTORY     = 30       # 이력 더 많이 유지
-            SIM_THRESHOLD   = 0.75    # 0.9 → 0.75 (너무 엄격하면 같은 사람도 초기화됨)
+            SIM_THRESHOLD   = 0.82    # 0.9 → 0.75 (너무 엄격하면 같은 사람도 초기화됨)
             REID_THRESHOLD  = 0.80    # Re-ID 기준도 살짝 낮춤
-            MAX_LOST_FRAMES = 150     # 5초(30fps 기준) → 더 오래 기억
+            MAX_LOST_FRAMES = 170     # 5초(30fps 기준) → 더 오래 기억
 
             if not tids:
                 return
