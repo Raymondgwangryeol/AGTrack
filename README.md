@@ -31,7 +31,7 @@ ByteTrack으로 다수의 사람을 실시간 추적하고, MiVOLO로 각 객체
 
 ---
 ## 🛠 기술 스택
-- **Tracking**: ByteTrack, Kalman Filter, BoostTrack++
+- **Tracking**: ByteTrack, Kalman Filter
 - **Age/Gender**: MiVOLO
 - **Optimization**: Cosine Similarity 기반 Re-ID, Similarity Matrix 병렬화
 - **Visualization**: Gradio Dashboard
